@@ -1,30 +1,38 @@
 #include <ESP8266WiFi.h>
 #include <WiFiClient.h>
 #include <ESP8266WebServer.h>
+#include <aREST.h>
 #include <DHT.h>
 
 #define DHTPIN 5 // GPIO5 == D1 on the ESP board.
 #define DHTTYPE DHT11 // DHT11 is the model sensor I'm using
 
-const char* ssid     = "ssid";
-const char* password = "pwd";
-float humidity, temp_f;  // Values read from sensor
+const char* ssid     = "SKYNET";
+const char* password = "killermike";
+
+//Node static IP
+IPAddress ip(192,168,1,128);
+IPAddress gateway(192,168,1,1);
+IPAddress subnet(255,255,255,0);
+
+// Values read from sensor
+float humidity, temp_f;
+
 
 DHT dht(DHTPIN, DHTTYPE);
 ESP8266WebServer server(80);
 String webString="";     // String to display
+aREST rest = aREST();
 
 
 void setupWebServer(){
   Serial.println("Entering: setupWebServer()");
   server.on("/", [](){  // if you add this subdirectory to your webserver call, you get text below :)
 
-    webString = "<!DOCTYPE html><html><h1>";
-    webString+= "Temperature: "+String((int)temp_f)+" *F";// Arduino has a hard time with float to string
-    webString+= " Humidity: "+String((int)humidity)+"%";
-    webString+= "</h1></html>";
+    webString = "{\"temperature\": "+String((float)temp_f);// Arduino has a hard time with float to string
+    webString+= ",\"humidity\": "+String((int)humidity)+"}";
 
-    server.send(200, "text/html", webString); // send to someones browser when asked
+    server.send(200, "application/json", webString); // send to someones browser when asked
   });
   server.begin();
   Serial.println("HTTP server started");
@@ -38,6 +46,7 @@ void initWifi(){
 
   WiFi.mode(WIFI_STA);
   WiFi.begin(ssid, password);
+  WiFi.config(ip, gateway, subnet);
 
   while (WiFi.status() != WL_CONNECTED) {
     delay(500);
@@ -51,7 +60,6 @@ void initWifi(){
 }
 
 void readAmbiance(){
-  // Wait a few seconds between measurements.
   delay(2000);
 
   // Reading temperature or humidity takes about 250 milliseconds!
@@ -59,7 +67,7 @@ void readAmbiance(){
   humidity = dht.readHumidity();
 
   // Read temperature as Fahrenheit (isFahrenheit = true)
-  temp_f = dht.readTemperature(true);
+  temp_f = dht.readTemperature();
 
   // Check if any reads failed and exit early (to try again).
   if (isnan(humidity) || isnan(temp_f)) {
@@ -69,29 +77,20 @@ void readAmbiance(){
 
   // Compute heat index in Fahrenheit (the default)
   float hif = dht.computeHeatIndex(temp_f, humidity);
-
-  //These are just debug printouts to console
-  Serial.print("Humidity: ");
-  Serial.print(humidity);
-  Serial.print(" %\t");
-  Serial.print("Temperature: ");
-  Serial.print(temp_f);
-  Serial.print(" *F\t");
-  Serial.print("Heat index: ");
-  Serial.print(hif);
-  Serial.println(" *F");
 }
 
 
 void setup() {
   Serial.begin(9600);
-  Serial.println("DHTxx test!");
+  //Serial.println("Waking...");
   initWifi();
   dht.begin();
+  readAmbiance();
   setupWebServer();
 }
 
 void loop() {
-  readAmbiance();
   server.handleClient();
+  //Serial.println("Sleeping...");
+  //ESP.deepSleep(60000000);
 }
